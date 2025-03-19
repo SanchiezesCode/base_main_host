@@ -1,0 +1,90 @@
+volumes:
+  grafana-data:
+  prometheus-data:
+  loki-data:
+
+networks:
+  app:
+    name: app
+
+services:
+  grafana:
+    image: grafana/grafana:11.5.2
+    container_name: grafana
+    labels:
+      logging: "promtail"
+      logging_jobname: "containerlogs"
+    ports:
+      - 3000:3000
+    restart: unless-stopped
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./config/grafana/datasources/grafana.yaml:/etc/grafana/provisioning/datasources/datasources.yaml
+      - ./config/grafana/plugins/app.yaml:/etc/grafana/provisioning/plugins/app.yaml
+    environment:
+      - GF_INSTALL_PLUGINS=https://storage.googleapis.com/integration-artifacts/grafana-lokiexplore-app/grafana-lokiexplore-app-latest.zip;grafana-lokiexplore-app
+    networks:
+      - app
+
+  loki:
+    image: grafana/loki:3.3.1
+    container_name: loki
+    labels:
+      logging: "promtail"
+      logging_jobname: "containerlogs"
+    ports:
+      - 3100:3100
+    restart: unless-stopped
+    volumes:
+      - loki-data:/loki
+    networks:
+      - app
+
+  promtail:
+    image:  grafana/promtail:3.0.0
+    container_name: promtail
+    labels:
+      logging: "promtail"
+      logging_jobname: "containerlogs"
+    restart: unless-stopped
+    volumes:
+      - ./config/promtail/promtail.yaml:/etc/promtail/docker-config.yaml
+      - /var/log:/var/log
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: -config.file=/etc/promtail/docker-config.yaml
+    depends_on:
+      - loki
+    networks:
+      - app
+  
+  prometheus:
+    image: prom/prometheus:v3.2.1
+    container_name: prometheus
+    labels:
+      logging: "promtail"
+      logging_jobname: "containerlogs"
+    ports:
+      - "9090:9090"
+    restart: unless-stopped
+    volumes:
+      - prometheus-data:/prometheus
+      - ./config/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+    networks:
+      - app
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:latest
+    container_name: cadvisor
+    labels:
+      logging: "promtail"
+      logging_jobname: "containerlogs"
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:rw
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
+
